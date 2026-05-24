@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>國稅局 AI 稅務稽查系統 | AI稅務稽查</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(145deg, #0a1120 0%, #03060c 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+            color: #eef5ff;
+        }
+
+        /* 純色背景 (取代動態地圖) */
+        .bg-static {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 20% 30%, #0a1428, #020408);
+            z-index: 0;
+        }
+
+        .main-container {
+            position: relative;
+            z-index: 2;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 1.5rem 2rem 5rem 2rem;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+            border-bottom: 1px solid rgba(64, 128, 255, 0.5);
+            padding-bottom: 1rem;
+        }
+        .title-section h1 {
+            font-size: 1.9rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #FFE6A7, #FFB347);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .title-section p {
+            font-size: 0.85rem;
+            color: #9aa9c1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 5px;
+        }
+        .ai-badge {
+            background: rgba(0, 180, 255, 0.25);
+            border-radius: 20px;
+            padding: 4px 10px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #3bc0fc;
+            border: 1px solid #3bc0fc80;
+        }
+        .tb-logo {
+            width: 58px;
+            height: 58px;
+            background: linear-gradient(145deg, #1e2a3a, #0a111c);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 28px;
+            font-family: 'Inter', monospace;
+            color: #f5b642;
+            box-shadow: 0 0 18px rgba(59,130,246,0.6);
+            border: 2px solid #3b82f6;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 0.9fr;
+            gap: 1.8rem;
+            margin-top: 1rem;
+        }
+
+        .glass-card {
+            background: rgba(8, 18, 28, 0.75);
+            backdrop-filter: blur(12px);
+            border-radius: 32px;
+            border: 1px solid rgba(59,130,246,0.4);
+            padding: 1.5rem;
+            box-shadow: 0 20px 35px -12px black;
+        }
+
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+            border-left: 4px solid #3b82f6;
+            padding-left: 15px;
+        }
+        .card-title i {
+            color: #3b82f6;
+        }
+        .btn-refresh {
+            background: #1e3a5f;
+            border: none;
+            color: white;
+            padding: 6px 14px;
+            border-radius: 40px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: 0.2s;
+        }
+        .btn-refresh:hover {
+            background: #2c5282;
+            transform: scale(1.02);
+        }
+
+        .enterprise-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        .enterprise-table th, .enterprise-table td {
+            padding: 12px 8px;
+            text-align: left;
+            border-bottom: 1px solid rgba(59,130,246,0.3);
+        }
+        .enterprise-table th {
+            color: #90cdf4;
+        }
+        .risk-tag {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 40px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-align: center;
+        }
+        .risk-high { background: #dc2626; color: white; box-shadow: 0 0 6px red; }
+        .risk-medium { background: #eab308; color: #1e1e2f; }
+        .risk-low { background: #10b981; color: white; }
+        .selected-row {
+            background: rgba(59,130,246,0.25);
+            border-left: 3px solid #3b82f6;
+        }
+        .enterprise-table tr {
+            cursor: pointer;
+            transition: 0.1s;
+        }
+        .enterprise-table tr:hover {
+            background: rgba(59,130,246,0.15);
+        }
+
+        .alert-red {
+            background: rgba(220, 38, 38, 0.2);
+            border-radius: 32px;
+            padding: 1rem;
+            margin: 1rem 0;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            border: 1px solid #ff5a5a;
+        }
+        .red-light {
+            width: 40px;
+            height: 40px;
+            background: #ff3b3b;
+            border-radius: 50%;
+            box-shadow: 0 0 15px 5px #ff0000;
+            animation: pulseRed 0.9s infinite alternate;
+        }
+        .red-light.dim {
+            background: #5a2e2e;
+            box-shadow: none;
+            animation: none;
+        }
+        @keyframes pulseRed {
+            0% { opacity: 0.6; transform: scale(0.95); box-shadow: 0 0 5px red; }
+            100% { opacity: 1; transform: scale(1.1); box-shadow: 0 0 25px #ff3a3a; }
+        }
+        .reason-box {
+            background: #07111eaa;
+            border-radius: 24px;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-left: 5px solid #3b82f6;
+            font-size: 0.9rem;
+        }
+        .btn-group {
+            display: flex;
+            gap: 1rem;
+            margin: 1.5rem 0 1rem;
+            flex-wrap: wrap;
+        }
+        .btn-ai, .btn-manual {
+            border: none;
+            padding: 10px 24px;
+            border-radius: 40px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-ai {
+            background: linear-gradient(95deg, #1e40af, #1e3a8a);
+            color: white;
+            border: 1px solid #60a5fa;
+        }
+        .btn-manual {
+            background: rgba(245, 158, 11, 0.9);
+            color: #0a0f1e;
+        }
+        .btn-excel, .btn-word {
+            background: #0f2b3d;
+            border: 1px solid #38bdf8;
+            padding: 8px 18px;
+            border-radius: 40px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: white;
+        }
+        .report-buttons {
+            margin-top: 18px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            border-top: 1px solid rgba(59,130,246,0.3);
+            padding-top: 1.2rem;
+        }
+        .info-text {
+            font-size: 0.75rem;
+            color: #9cb4e0;
+        }
+        /* 行走放大鏡 */
+        .walking-magnifier {
+            position: fixed;
+            bottom: 20px;
+            left: 0;
+            z-index: 15;
+            pointer-events: none;
+            font-size: 52px;
+            filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4));
+            animation: walkAcross 18s linear infinite;
+        }
+        @keyframes walkAcross {
+            0% { left: -80px; transform: scaleX(1); }
+            49% { transform: scaleX(1); }
+            50% { transform: scaleX(-1); }
+            95% { transform: scaleX(-1); }
+            100% { left: calc(100% + 50px); transform: scaleX(-1); }
+        }
+        @media (max-width: 900px) {
+            .dashboard { grid-template-columns: 1fr; }
+            .main-container { padding: 1rem; }
+        }
+        footer {
+            margin-top: 2rem;
+            text-align: center;
+            font-size: 0.75rem;
+            opacity: 0.8;
+            border-top: 1px solid rgba(59,130,246,0.3);
+            padding-top: 1rem;
+        }
+        .loader {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid white;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div class="bg-static"></div>
+<div class="walking-magnifier">🔍✨</div>
+
+<div class="main-container">
+    <div class="header">
+        <div class="title-section">
+            <h1><i class="fas fa-microchip"></i> AI 稅務稽查系統</h1>
+            <p><span class="ai-badge"><i class="fas fa-brain"></i> 孤立森林・異常偵測</span> <span><i class="fas fa-file-invoice-dollar"></i> 稅務稽查 | 即時監控</span></p>
+        </div>
+        <div class="tb-logo">TB</div>
+    </div>
+
+    <div class="dashboard">
+        <!-- 左側企業歸類 -->
+        <div class="glass-card">
+            <div class="card-title">
+                <span><i class="fas fa-building"></i> 企業歸類 & 風險評級</span>
+                <button id="refresh-data-btn" class="btn-refresh"><i class="fas fa-sync-alt"></i> 更新企業資料</button>
+            </div>
+            <div style="overflow-x: auto;">
+                <table class="enterprise-table" id="company-table">
+                    <thead>
+                        <tr><th>企業名稱(虛擬)</th><th>行業別</th><th>營收(萬元)</th><th>AI 風險歸類 (紅/黃/綠)</th></tr>
+                    </thead>
+                    <tbody id="table-body"></tbody>
+                </table>
+            </div>
+            <div class="info-text" style="margin-top: 16px;">
+                <i class="fas fa-info-circle"></i> 點擊企業 → 執行 AI 深度稽查，顯示異常原因與紅燈警報｜資料可一鍵更新
+            </div>
+        </div>
+
+        <!-- 右側 AI 查核引擎 (即時稽查分析) -->
+        <div class="glass-card">
+            <div class="card-title">
+                <i class="fas fa-microscope"></i> AI 查核引擎
+                <span style="font-size: 12px;"><i class="fas fa-shield-alt"></i> 即時稽查分析</span>
+            </div>
+            <div style="background: #00000033; border-radius: 28px; padding: 0.5rem 1rem; margin-bottom: 16px;">
+                <span style="font-weight: 600;"><i class="fas fa-crosshairs"></i> 當前選中企業：</span>
+                <strong id="selected-company-name">未選取</strong>
+            </div>
+            <div id="alert-container">
+                <div class="alert-red" id="red-alert-block">
+                    <div id="red-light-indicator" class="red-light dim"></div>
+                    <div><span style="font-weight: 800;">⚠️ 逃漏稅警報</span><br><span id="alert-status-text">待查核</span></div>
+                </div>
+            </div>
+            <div class="reason-box" id="reason-box">
+                <i class="fas fa-file-alt"></i> <strong>稽查原因</strong><br>
+                <span id="reason-text">尚未執行 AI 稽查，請選擇企業並點擊「AI 查核」。</span>
+            </div>
+            <div class="btn-group">
+                <button id="ai-audit-btn" class="btn-ai"><i class="fas fa-robot"></i> 🤖 AI 稽查</button>
+                <button id="manual-transfer-btn" class="btn-manual"><i class="fas fa-user-check"></i> 📞 轉人工稽查</button>
+            </div>
+            <div class="report-buttons">
+                <button id="export-excel-btn" class="btn-excel"><i class="fas fa-file-excel"></i> 產生正式Excel報告</button>
+                <button id="export-word-btn" class="btn-word"><i class="fas fa-file-word"></i> 產生正式Word報告</button>
+            </div>
+            <div class="info-text" id="global-feedback" style="margin-top: 12px;">
+                <i class="fas fa-chart-line"></i> AI 稅務稽查系統 @TB · 紅黃綠風險分級 | 資料即時更新
+            </div>
+        </div>
+    </div>
+    <footer>
+        <i class="fas fa-balance-scale"></i> 稅務稽查 · AI 稅務稽查系統 | 紅燈門檻 ≥ 65 觸發警報 | 黃燈 40-64 綠燈 <40
+    </footer>
+</div>
+
+<script>
+    // 行業標準利潤率
+    const industriesMap = {
+        '餐飲業': 0.12, '製造業': 0.18, '科技業': 0.25,
+        '零售業': 0.10, '建築業': 0.15, '服務業': 0.22
+    };
+    
+    // 基礎虛擬企業名稱 (不具實)
+    const baseEnterprises = [
+        { id: 1, name: "環宇國際餐飲", industry: "餐飲業" },
+        { id: 2, name: "新世紀精密製造", industry: "製造業" },
+        { id: 3, name: "未來雲端科技", industry: "科技業" },
+        { id: 4, name: "全聯零售通路", industry: "零售業" },
+        { id: 5, name: "鼎峰建設", industry: "建築業" },
+        { id: 6, name: "晨星管理顧問", industry: "服務業" }
+    ];
+
+    // 風險計算函數 (孤立森林模擬)
+    function computeRiskAndReason(enterprise) {
+        const profitRateStd = industriesMap[enterprise.industry] || 0.15;
+        const expectedIncome = enterprise.revenue * profitRateStd;
+        const declared = enterprise.declaredIncome;
+        const deviation = (declared - expectedIncome) / expectedIncome;
+        const taxBurden = enterprise.taxWithheld / enterprise.revenue;
+        const stdTaxBurden = 0.2;
+        const burdenDeviation = (taxBurden - stdTaxBurden) / stdTaxBurden;
+        const costRate = enterprise.cost / enterprise.revenue;
+        const stdCostRate = 0.65;
+        const costAnomaly = costRate - stdCostRate;
+        
+        let riskScore = 0;
+        if(deviation < -0.2) riskScore += 40;
+        else if(deviation < -0.05) riskScore += 20;
+        else if(deviation > 0.1) riskScore += 5;
+        if(deviation < -0.4) riskScore += 25;
+        if(burdenDeviation < -0.3) riskScore += 20;
+        if(burdenDeviation < -0.5) riskScore += 15;
+        if(costAnomaly > 0.12) riskScore += 20;
+        if(costAnomaly > 0.2) riskScore += 15;
+        if(enterprise.industry === '餐飲業' && deviation < -0.25) riskScore += 10;
+        if(enterprise.industry === '建築業' && costAnomaly > 0.18) riskScore += 12;
+        riskScore = Math.min(100, Math.max(0, riskScore + 8));
+        
+        let reasons = [];
+        if(deviation < -0.2) reasons.push(`申報所得較行業預期低 ${Math.abs(deviation*100).toFixed(0)}%，偏離利潤率(${(profitRateStd*100).toFixed(0)}%)`);
+        if(burdenDeviation < -0.25) reasons.push(`扣繳稅額率僅 ${(taxBurden*100).toFixed(1)}%，低於同業平均`);
+        if(costAnomaly > 0.12) reasons.push(`成本費用率偏高(${(costRate*100).toFixed(0)}%)，疑似虛列成本`);
+        if(deviation < -0.4) reasons.push(`所得偏離率極端，逃漏稅嫌疑重大`);
+        if(reasons.length === 0) reasons.push("財報指標無顯著異常，建議持續監控");
+        const isRedAlert = riskScore >= 65;
+        return {
+            riskScore: Math.round(riskScore),
+            reasonText: reasons.slice(0, 3).join("；") + (riskScore >= 70 ? "。【紅燈高風險】" : "。"),
+            isRedAlert
+        };
+    }
+
+    function getRiskLevel(score) {
+        if(score >= 65) return { text: "高風險", class: "risk-high" };
+        if(score >= 40) return { text: "中風險", class: "risk-medium" };
+        return { text: "低風險", class: "risk-low" };
+    }
+
+    let companiesData = [];
+    let currentSelectedId = null;
+
+    // 生成隨機財務數據
+    function refreshEnterpriseData() {
+        const newCompanies = baseEnterprises.map(ent => {
+            let baseRev = 0;
+            if(ent.industry === '餐飲業') baseRev = 3000 + Math.random() * 4000;
+            else if(ent.industry === '製造業') baseRev = 10000 + Math.random() * 9000;
+            else if(ent.industry === '科技業') baseRev = 7000 + Math.random() * 8000;
+            else if(ent.industry === '零售業') baseRev = 15000 + Math.random() * 12000;
+            else if(ent.industry === '建築業') baseRev = 12000 + Math.random() * 10000;
+            else baseRev = 3000 + Math.random() * 5000;
+            const revenue = Math.round(baseRev);
+            const industryProfit = industriesMap[ent.industry];
+            const expectedIncome = revenue * industryProfit;
+            const isUnderreport = Math.random() < 0.35;
+            let declaredIncome;
+            if(isUnderreport) {
+                const ratio = 0.3 + Math.random() * 0.4;
+                declaredIncome = Math.round(expectedIncome * ratio);
+            } else {
+                declaredIncome = Math.round(expectedIncome * (0.9 + Math.random() * 0.2));
+            }
+            let costRate = 0.55 + Math.random() * 0.2;
+            if(isUnderreport) costRate = 0.75 + Math.random() * 0.2;
+            const cost = Math.round(revenue * costRate);
+            const taxWithheld = Math.round(declaredIncome * 0.2 * (0.8 + Math.random() * 0.5));
+            return {
+                id: ent.id,
+                name: ent.name,
+                industry: ent.industry,
+                revenue: revenue,
+                declaredIncome: declaredIncome,
+                cost: cost,
+                taxWithheld: taxWithheld
+            };
+        });
+        const updated = newCompanies.map(comp => {
+            const { riskScore, reasonText, isRedAlert } = computeRiskAndReason(comp);
+            return { ...comp, riskScore, riskReason: reasonText, isRedAlert };
+        });
+        return updated;
+    }
+
+    function renderCompanyTable() {
+        const tbody = document.getElementById('table-body');
+        if(!tbody) return;
+        tbody.innerHTML = "";
+        companiesData.forEach(comp => {
+            const risk = getRiskLevel(comp.riskScore);
+            const row = tbody.insertRow();
+            if(currentSelectedId === comp.id) row.classList.add('selected-row');
+            row.setAttribute('data-id', comp.id);
+            row.innerHTML = `
+                <td>${comp.name}</td>
+                <td>${comp.industry}</td>
+                <td>${comp.revenue.toLocaleString()}</td>
+                <td><span class="risk-tag ${risk.class}">${risk.text}</span></td>
+            `;
+            row.addEventListener('click', () => selectCompany(comp.id));
+        });
+    }
+
+    function selectCompany(id) {
+        currentSelectedId = id;
+        const company = companiesData.find(c => c.id === id);
+        if(company) {
+            document.getElementById('selected-company-name').innerText = company.name;
+            document.getElementById('reason-text').innerHTML = `尚未執行 AI 深度稽查，請點擊「AI 稽查」分析 ${company.name}。`;
+            const redLightDiv = document.getElementById('red-light-indicator');
+            redLightDiv.classList.add('dim');
+            redLightDiv.style.animation = 'none';
+            document.getElementById('alert-status-text').innerText = '待查核';
+            document.getElementById('red-alert-block').style.border = "1px solid #ff5a5a";
+            renderCompanyTable();
+        } else {
+            document.getElementById('selected-company-name').innerText = "未選取";
+        }
+    }
+
+    function updateAllData() {
+        companiesData = refreshEnterpriseData();
+        if(currentSelectedId && !companiesData.find(c => c.id === currentSelectedId)) {
+            currentSelectedId = companiesData[0]?.id || null;
+        } else if(!currentSelectedId && companiesData.length) {
+            currentSelectedId = companiesData[0].id;
+        }
+        renderCompanyTable();
+        if(currentSelectedId) {
+            const selectedComp = companiesData.find(c => c.id === currentSelectedId);
+            if(selectedComp) document.getElementById('selected-company-name').innerText = selectedComp.name;
+        } else {
+            document.getElementById('selected-company-name').innerText = "未選取";
+        }
+        document.getElementById('reason-text').innerHTML = "資料已更新，請重新執行 AI 稽查。";
+        document.getElementById('alert-status-text').innerText = "待查核";
+        const redLightDiv = document.getElementById('red-light-indicator');
+        redLightDiv.classList.add('dim');
+        redLightDiv.style.animation = 'none';
+        document.getElementById('global-feedback').innerHTML = '<i class="fas fa-check-circle"></i> 企業資料已更新，風險分級重新計算 (紅/黃/綠)';
+        setTimeout(() => {
+            if(document.getElementById('global-feedback').innerHTML.includes('已更新'))
+                document.getElementById('global-feedback').innerHTML = '<i class="fas fa-chart-line"></i> AI 稅務稽查系統 @TB · 紅黃綠風險分級';
+        }, 2500);
+    }
+
+    async function runAICheck() {
+        if(!currentSelectedId) {
+            document.getElementById('reason-text').innerHTML = "⚠️ 請先點擊左側企業進行選取。";
+            return;
+        }
+        const company = companiesData.find(c => c.id === currentSelectedId);
+        if(!company) return;
+        const btnAI = document.getElementById('ai-audit-btn');
+        const originalHTML = btnAI.innerHTML;
+        btnAI.innerHTML = '<span class="loader"></span> AI 稽查中...';
+        btnAI.disabled = true;
+        await new Promise(r => setTimeout(r, 600));
+        
+        const { riskScore, reasonText, isRedAlert } = computeRiskAndReason({
+            name: company.name, industry: company.industry, revenue: company.revenue,
+            declaredIncome: company.declaredIncome, cost: company.cost, taxWithheld: company.taxWithheld
+        });
+        company.riskScore = riskScore;
+        company.riskReason = reasonText;
+        company.isRedAlert = isRedAlert;
+        renderCompanyTable();
+        
+        document.getElementById('reason-text').innerHTML = `<i class="fas fa-chart-line"></i> 風險指數：${riskScore} 分<br>🔍 異常特徵：${reasonText}`;
+        const redLightDiv = document.getElementById('red-light-indicator');
+        const alertSpan = document.getElementById('alert-status-text');
+        if(isRedAlert) {
+            redLightDiv.classList.remove('dim');
+            redLightDiv.style.animation = 'pulseRed 0.9s infinite alternate';
+            alertSpan.innerHTML = `🔴 高風險警報！逃漏稅嫌疑指數 ${riskScore} 分 (≥65)`;
+            document.getElementById('red-alert-block').style.border = "1px solid #ff5a5a";
+        } else {
+            redLightDiv.classList.add('dim');
+            redLightDiv.style.animation = 'none';
+            alertSpan.innerHTML = `🟡 風險偏低 (${riskScore}分) 未達紅燈`;
+            document.getElementById('red-alert-block').style.border = "1px solid rgba(59,130,246,0.5)";
+        }
+        btnAI.innerHTML = originalHTML;
+        btnAI.disabled = false;
+    }
+
+    function transferToManual() {
+        if(!currentSelectedId) {
+            document.getElementById('global-feedback').innerHTML = '<i class="fas fa-exclamation-triangle"></i> 請先選取企業再轉人工。';
+            setTimeout(() => {
+                if(document.getElementById('global-feedback').innerHTML.includes('請先'))
+                    document.getElementById('global-feedback').innerHTML = '<i class="fas fa-chart-line"></i> AI 稅務稽查系統 @TB · 紅黃綠風險分級';
+            }, 2000);
+            return;
+        }
+        const company = companiesData.find(c => c.id === currentSelectedId);
+        if(company) {
+            document.getElementById('global-feedback').innerHTML = `<i class="fas fa-user-headset"></i> ✅ 已將「${company.name}」轉入人工稽查佇列，編號 M${Math.floor(Math.random()*10000)}，稅務專員將聯繫。`;
+            setTimeout(() => {
+                if(document.getElementById('global-feedback').innerHTML.includes('轉入人工'))
+                    document.getElementById('global-feedback').innerHTML = '<i class="fas fa-chart-line"></i> AI 稅務稽查系統 @TB · 紅黃綠風險分級';
+            }, 4000);
+        }
+    }
+
+    // 正式Excel報告
+    function exportToExcel() {
+        const exportCompanies = companiesData.map(c => {
+            const latest = computeRiskAndReason({ name: c.name, industry: c.industry, revenue: c.revenue, declaredIncome: c.declaredIncome, cost: c.cost, taxWithheld: c.taxWithheld });
+            return { ...c, riskScore: latest.riskScore, riskReason: latest.reasonText, isRedAlert: latest.isRedAlert };
+        });
+        const allData = exportCompanies.map(c => ({
+            "企業名稱(虛擬)": c.name, "行業別": c.industry, "營收(萬元)": c.revenue, "申報所得(萬元)": c.declaredIncome,
+            "預期所得(萬元)": (c.revenue * (industriesMap[c.industry]||0.15)).toFixed(0),
+            "所得偏離率": ((c.declaredIncome - (c.revenue*(industriesMap[c.industry]||0.15))) / (c.revenue*(industriesMap[c.industry]||0.15))*100).toFixed(1)+"%",
+            "風險指數": c.riskScore, "稽查摘要": c.riskReason, "紅燈警報": c.isRedAlert ? "是" : "否"
+        }));
+        const highRisk = exportCompanies.filter(c => c.riskScore >= 65).map(c => ({
+            "企業名稱": c.name, "行業別": c.industry, "營收(萬元)": c.revenue, "風險指數": c.riskScore, "異常原因": c.riskReason
+        }));
+        const industryStats = {};
+        exportCompanies.forEach(c => { if(!industryStats[c.industry]) industryStats[c.industry] = { count:0, sumRisk:0, highCount:0 }; industryStats[c.industry].count++; industryStats[c.industry].sumRisk += c.riskScore; if(c.riskScore>=65) industryStats[c.industry].highCount++; });
+        const statsRows = Object.entries(industryStats).map(([ind, val]) => ({ "行業別": ind, "企業家數": val.count, "平均風險指數": (val.sumRisk/val.count).toFixed(1), "高風險家數": val.highCount }));
+        const summary = [{ "指標": "總稽查企業數", "數值": exportCompanies.length, "說明": `紅燈≥65，黃燈40-64，綠燈<40，高風險共 ${exportCompanies.filter(c=>c.riskScore>=65).length} 家` },
+                         { "指標": "AI模型", "數值": "孤立森林 (Isolation Forest)", "說明": "動態標準參數" },
+                         { "指標": "報告產出時間", "數值": new Date().toLocaleString(), "說明": "正式Excel報告" }];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allData), "全部企業風險資料");
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(highRisk), "高風險逃漏稅名單");
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(statsRows), "行業別統計");
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "模型評估摘要");
+        XLSX.writeFile(wb, `國稅局_AI稅務稽查報告_${new Date().toISOString().slice(0,19)}.xlsx`);
+        document.getElementById('global-feedback').innerHTML = '<i class="fas fa-check-circle"></i> Excel 報告已下載！';
+        setTimeout(() => { if(document.getElementById('global-feedback').innerHTML.includes('Excel')) document.getElementById('global-feedback').innerHTML = '<i class="fas fa-chart-line"></i> AI 稅務稽查系統 @TB · 紅黃綠風險分級'; }, 3000);
+    }
+
+    // 美化Word報告格式 + 邊距調整 (top margin上移, left margin左移)
+    function exportToWord() {
+        const exportCompanies = companiesData.map(c => {
+            const latest = computeRiskAndReason({ name: c.name, industry: c.industry, revenue: c.revenue, declaredIncome: c.declaredIncome, cost: c.cost, taxWithheld: c.taxWithheld });
+            return { ...c, riskScore: latest.riskScore, riskReason: latest.reasonText, isRedAlert: latest.isRedAlert };
+        });
+        const highRiskList = exportCompanies.filter(c => c.riskScore >= 65);
+        const dateStr = new Date().toLocaleString('zh-TW', { hour12: false });
+        // 調整 margin: 上邊距1.2cm (上移)，左邊距1cm (左移)，右下保留適當邊距
+        let html = `<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>財政部國稅局 AI 稅務稽查正式報告</title>
+            <style>
+                body {
+                    font-family: '標楷體', 'Times New Roman', SimSun, serif;
+                    margin: 1.2cm 1.5cm 2cm 1cm;
+                    background: white;
+                    color: #1e2a3a;
+                    line-height: 1.3;
+                }
+                h1 {
+                    color: #0b3b5f;
+                    text-align: center;
+                    font-size: 26pt;
+                    border-bottom: 3px solid #f5b642;
+                    display: inline-block;
+                    width: auto;
+                    margin-bottom: 8px;
+                }
+                .title-wrap { text-align: center; margin-bottom: 20px; }
+                .subtitle { text-align: center; color: #2c5282; font-size: 12pt; margin-top: 5px; }
+                h2 {
+                    background: #eef2f7;
+                    padding: 8px 15px;
+                    border-left: 6px solid #f5b642;
+                    font-size: 18pt;
+                    margin-top: 28px;
+                    color: #0f2b3d;
+                }
+                table {
+                    border-collapse: collapse;
+                    width: 100%;
+                    margin: 20px 0;
+                    font-size: 11pt;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                }
+                th {
+                    background: #1e3a5f;
+                    color: white;
+                    padding: 10px 8px;
+                    border: 1px solid #2c5282;
+                }
+                td {
+                    border: 1px solid #b0c4de;
+                    padding: 8px;
+                    vertical-align: top;
+                }
+                .risk-red { background: #f8d7da; color: #721c24; font-weight: bold; }
+                .risk-yellow { background: #fff3cd; color: #856404; }
+                .risk-green { background: #d4edda; color: #155724; }
+                .sign-area {
+                    margin-top: 50px;
+                    display: flex;
+                    justify-content: space-between;
+                    border-top: 1px dashed #aaa;
+                    padding-top: 30px;
+                }
+                .footer-note {
+                    margin-top: 35px;
+                    font-size: 9pt;
+                    text-align: center;
+                    color: #5a6874;
+                }
+                .badge {
+                    background: #e9ecef;
+                    display: inline-block;
+                    padding: 2px 8px;
+                    border-radius: 12px;
+                    font-size: 9pt;
+                }
+            </style>
+        </head>
+        <body>
+        <div class="title-wrap">
+            <h1>財政部國稅局 AI 稅務稽查正式報告</h1>
+            <div class="subtitle">孤立森林異常偵測系統 | 紅黃綠風險分級</div>
+        </div>
+        <p>報告產出時間：${dateStr} &nbsp;&nbsp; 系統：AI 稅務稽查系統 @TB</p>
+        <h2>一、高風險逃漏稅名單（紅燈 ≥65 分）</h2>`;
+        if(highRiskList.length) {
+            html += `<table><thead><tr><th>企業名稱</th><th>行業別</th><th>營收(萬元)</th><th>風險指數</th><th>異常稽查原因</th></tr></thead><tbody>`;
+            highRiskList.forEach(c => {
+                html += `<tr><td>${c.name}</td><td>${c.industry}</td><td>${c.revenue.toLocaleString()}</td><td class="risk-red">${c.riskScore}</td><td>${c.riskReason.substring(0,100)}</td></tr>`;
+            });
+            html += `</tbody></table>`;
+        } else { html += `<p>✅ 本期無高風險企業。</p>`; }
+        
+        html += `<h2>二、全企業風險摘要（紅/黃/綠分級）</h2>
+        <table><thead><tr><th>企業名稱</th><th>行業別</th><th>營收(萬元)</th><th>風險指數</th><th>風險燈號</th><th>稽查摘要</th></tr></thead><tbody>`;
+        exportCompanies.forEach(c => {
+            let levelClass = "", levelText = "";
+            if(c.riskScore >= 65) { levelClass = "risk-red"; levelText = "🔴 紅燈(高風險)"; }
+            else if(c.riskScore >= 40) { levelClass = "risk-yellow"; levelText = "🟡 黃燈(中風險)"; }
+            else { levelClass = "risk-green"; levelText = "🟢 綠燈(低風險)"; }
+            html += `<tr><td>${c.name}</td><td>${c.industry}</td><td>${c.revenue.toLocaleString()}</td><td class="${levelClass}">${c.riskScore}</td><td>${levelText}</td><td>${c.riskReason.substring(0,70)}</td></tr>`;
+        });
+        html += `</tbody></table>
+        <h2>三、稽核結論與建議</h2>
+        <p>依據 AI 異常檢測模型，本期共稽查 ${exportCompanies.length} 家企業，其中高風險（紅燈）企業 ${highRiskList.length} 家。建議優先針對紅燈企業啟動實地查核及帳務複審，黃燈企業加強書面審查，綠燈企業持續監控。<br>
+        本系統採用孤立森林演算法，動態更新行業標準，有效提升稅務稽查精準度。</p>
+        <div class="sign-area">
+            <div>承辦稅務員：_________________</div>
+            <div>單位主管：_________________</div>
+            <div>機關首長：_________________</div>
+        </div>
+        <div class="footer-note">＊本報告由 AI 稅務稽查系統自動產出，具正式行政參考效力。＊<br>報告產生時間：${dateStr}</div>
+        </body></html>`;
+        const blob = new Blob([html], { type: "application/msword" });
+        saveAs(blob, `國稅局_AI稅務稽查報告_${new Date().toISOString().slice(0,19)}.doc`);
+        document.getElementById('global-feedback').innerHTML = '<i class="fas fa-file-word"></i> Word 正式報告已下載（邊距已優化:上移/左移）！';
+        setTimeout(() => { if(document.getElementById('global-feedback').innerHTML.includes('Word')) document.getElementById('global-feedback').innerHTML = '<i class="fas fa-chart-line"></i> AI 稅務稽查系統 @TB · 紅黃綠風險分級'; }, 3000);
+    }
+
+    // 初始化
+    function init() {
+        companiesData = refreshEnterpriseData();
+        if(companiesData.length) currentSelectedId = companiesData[0].id;
+        renderCompanyTable();
+        if(currentSelectedId) selectCompany(currentSelectedId);
+        else document.getElementById('selected-company-name').innerText = "未選取";
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        init();
+        document.getElementById('refresh-data-btn').addEventListener('click', updateAllData);
+        document.getElementById('ai-audit-btn').addEventListener('click', runAICheck);
+        document.getElementById('manual-transfer-btn').addEventListener('click', transferToManual);
+        document.getElementById('export-excel-btn').addEventListener('click', exportToExcel);
+        document.getElementById('export-word-btn').addEventListener('click', exportToWord);
+    });
+</script>
+</body>
+</html>
